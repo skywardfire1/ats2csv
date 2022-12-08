@@ -1,0 +1,64 @@
+#!/bin/bash
+
+############################################################
+###                                                      ###
+###  Скрипт, который конвертирует данные с АТС в такой   ###
+###  SCV файл, который нормально обработает Postgres.    ###
+###                                                      ###
+############################################################
+
+SOURCE_DATA_FILE=/home/sysadm/ats_data/`date +%H_of_%d_%m_%Y`
+WORKING_FILE=~/tmp_file
+RESULT_FILE=/home/sysadm/ats_log.csv
+
+# Препроцессинг исходного файла
+cat $SOURCE_DATA_FILE |grep -v EXT | grep -v ^$ |grep -v "\-\-" | grep -v Date  > $WORKING_FILE
+
+LINE_NUMBER=`cat $WORKING_FILE | wc -l`
+
+N=1
+
+while [ $N -le $LINE_NUMBER ] ; do
+
+VALUE_1=`cat $WORKING_FILE | head -n $N | tail -n 1 | cut -c 1-8`   # Дата
+VALUE_2=`cat $WORKING_FILE | head -n $N | tail -n 1 | cut -c 10-16` # Время
+VALUE_3=`cat $WORKING_FILE | head -n $N | tail -n 1 | cut -c 20-22` # Внутренний номер
+VALUE_5=`cat $WORKING_FILE | head -n $N | tail -n 1 | awk -F ' '  '{print $5}'`  # Исходящий номер
+VALUE_6=`cat $WORKING_FILE | head -n $N | tail -n 1 | cut -c 58-65  | sed "s/'/:/"` # Время разговора
+
+# Определяем с каким вообще вызовом имеем дело. Если в нем есть <I>, удаляем это, и помечаем его как входящий
+
+if [[ `echo $VALUE_5 | cut -c 1-3` == "<I>" ]]; then
+
+  VALUE_4="Входящий"
+  VALUE_5=`echo $VALUE_5 | cut -c 4-`
+
+else
+
+  VALUE_4="Исходящий"
+
+fi
+
+
+# Ну и теперь отрезаем лишние цифры от номера
+
+if [[ `echo $VALUE_5 | cut -c 1` == 8 ]] ; then # Если начинается с 8, то это в любом случае 11-значный формат
+
+  VALUE_5=`echo $VALUE_5 | cut -c -11`	  # Отрезаем 11 цифр
+
+else
+
+  VALUE_5=`echo $VALUE_5 | cut -c 1-7`	  # Отрезаем 7 цифр
+
+fi
+
+# Формируем строку в файле
+
+echo $VALUE_1";"$VALUE_2";"$VALUE_3";"$VALUE_4";"$VALUE_5";"$VALUE_6 >> $RESULT_FILE
+
+let N="$N+1"
+
+done
+
+# Удаляем временный файл, который мы создавали просто для ускорения процесса
+rm $WORKING_FILE
